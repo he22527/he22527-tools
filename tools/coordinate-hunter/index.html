@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>座標獵人</title>
+<style>
+  body {
+    background: #1a1a1a;
+    color: #fff;
+    font-family: "Chalkboard SE", "Comic Sans MS", "Microsoft JhengHei", sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+  h1 {
+    color: #ff9f43;
+    text-shadow: 2px 2px 0 #000;
+    letter-spacing: 4px;
+  }
+  #status {
+    display: flex;
+    gap: 30px;
+    font-size: 1.3em;
+    margin-bottom: 10px;
+  }
+  #status span { color: #ff9f43; font-weight: bold; }
+  #board {
+    display: grid;
+    grid-template-columns: repeat(12, 34px);
+    grid-template-rows: repeat(12, 34px);
+    gap: 1px;
+    background: #444;
+    border: 3px solid #ff9f43;
+  }
+  .cell {
+    background: #222;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65em;
+    color: #888;
+  }
+  .axis-label { color: #ff9f43; font-weight: bold; background: #1a1a1a; }
+  .hit { background: #ff9f43; color: #1a1a1a; font-weight: bold; }
+  #controls { margin-top: 20px; display: flex; gap: 10px; }
+  input {
+    background: #222;
+    border: 2px solid #ff9f43;
+    color: #fff;
+    font-size: 1.1em;
+    padding: 8px;
+    width: 120px;
+    border-radius: 6px;
+  }
+  button {
+    background: #ff9f43;
+    color: #1a1a1a;
+    border: none;
+    font-size: 1.1em;
+    font-weight: bold;
+    padding: 8px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button:hover { background: #ffb976; }
+  #message { margin-top: 15px; font-size: 1.2em; min-height: 1.5em; }
+  #result { font-size: 1.5em; color: #ff9f43; margin-top: 10px; }
+</style>
+</head>
+<body>
+  <h1>🎯 座標獵人</h1>
+  <div id="status">
+    <div>⏱️ 時間：<span id="timer">60</span></div>
+    <div>🏆 分數：<span id="score">0</span> / 10</div>
+  </div>
+  <div id="board"></div>
+  <div id="controls">
+    <input id="guessInput" type="text" placeholder="例如：2,-3" autocomplete="off">
+    <button onclick="submitGuess()">猜！</button>
+    <button onclick="startGame()">重新開始</button>
+  </div>
+  <div id="message"></div>
+  <div id="result"></div>
+
+<script>
+const SIZE = 11; // -5 to 5
+const OFFSET = 5;
+let hidden = [];
+let found = [];
+let score = 0;
+let timeLeft = 60;
+let timerId = null;
+let gameActive = false;
+
+function coordKey(x, y) { return x + ',' + y; }
+
+function buildBoard() {
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+  // 12x12 grid: first row/col are axis labels
+  for (let row = -1; row < SIZE; row++) {
+    for (let col = -1; col < SIZE; col++) {
+      const cell = document.createElement('div');
+      if (row === -1 && col === -1) {
+        cell.className = 'cell axis-label';
+        cell.textContent = 'y\\x';
+      } else if (row === -1) {
+        cell.className = 'cell axis-label';
+        cell.textContent = col - OFFSET;
+      } else if (col === -1) {
+        cell.className = 'cell axis-label';
+        cell.textContent = OFFSET - row;
+      } else {
+        cell.className = 'cell';
+        const x = col - OFFSET;
+        const y = OFFSET - row;
+        cell.id = 'cell-' + coordKey(x, y);
+      }
+      board.appendChild(cell);
+    }
+  }
+}
+
+function randomCoords(n) {
+  const set = new Set();
+  while (set.size < n) {
+    const x = Math.floor(Math.random() * SIZE) - OFFSET;
+    const y = Math.floor(Math.random() * SIZE) - OFFSET;
+    set.add(coordKey(x, y));
+  }
+  return Array.from(set);
+}
+
+function startGame() {
+  clearInterval(timerId);
+  hidden = randomCoords(10);
+  found = [];
+  score = 0;
+  timeLeft = 60;
+  gameActive = true;
+  document.getElementById('score').textContent = score;
+  document.getElementById('timer').textContent = timeLeft;
+  document.getElementById('message').textContent = '';
+  document.getElementById('result').textContent = '';
+  document.getElementById('guessInput').value = '';
+  document.getElementById('guessInput').focus();
+  buildBoard();
+  timerId = setInterval(() => {
+    timeLeft--;
+    document.getElementById('timer').textContent = timeLeft;
+    if (timeLeft <= 0) endGame();
+  }, 1000);
+}
+
+function endGame() {
+  clearInterval(timerId);
+  gameActive = false;
+  document.getElementById('result').textContent = `⏰ 時間到！最終得分：${score} / 10`;
+}
+
+function submitGuess() {
+  if (!gameActive) return;
+  const val = document.getElementById('guessInput').value.trim();
+  const match = val.match(/^(-?\d+)\s*,\s*(-?\d+)$/);
+  const msgEl = document.getElementById('message');
+  if (!match) {
+    msgEl.textContent = '格式錯誤，請輸入像「2,-3」這樣的座標';
+    return;
+  }
+  const x = parseInt(match[1], 10);
+  const y = parseInt(match[2], 10);
+  if (x < -OFFSET || x > OFFSET || y < -OFFSET || y > OFFSET) {
+    msgEl.textContent = '座標超出範圍（-5 到 5）';
+    return;
+  }
+  const key = coordKey(x, y);
+  document.getElementById('guessInput').value = '';
+  if (found.includes(key)) {
+    msgEl.textContent = `(${x}, ${y}) 已經猜過了`;
+    return;
+  }
+  if (hidden.includes(key)) {
+    found.push(key);
+    score++;
+    document.getElementById('score').textContent = score;
+    const cell = document.getElementById('cell-' + key);
+    if (cell) { cell.classList.add('hit'); cell.textContent = '★'; }
+    msgEl.textContent = `命中！(${x}, ${y}) 🎯`;
+    if (score >= 10) {
+      msgEl.textContent = '全部命中！太厲害了！';
+      endGame();
+    }
+  } else {
+    msgEl.textContent = `(${x}, ${y}) 沒有東西，再試試看`;
+  }
+}
+
+document.getElementById('guessInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') submitGuess();
+});
+
+startGame();
+</script>
+</body>
+</html>
